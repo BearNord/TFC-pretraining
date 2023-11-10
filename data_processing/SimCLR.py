@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import os
 
-dataset_lst = ['SleepEEG', 'Epilepsy', 'FD-A', 'FD-B', 'HAR', 'Gesture', 'ecg', 'emg']
+dataset_lst = ['SleepEEG', 'Epilepsy', 'FD-A', 'FD-B', 'HAR', 'Gesture', 'ECG', 'EMG']
 n_classes_lst = [5, 2, 3, 3, 6, 8, 4, 3]
 
 def scatter_numpy(self, dim, index, src):
@@ -32,14 +32,26 @@ def scatter_numpy(self, dim, index, src):
         raise IndexError("The values of index must be between 0 and (self.shape[dim] -1)")
 
     def make_slice(arr, dim, i):
+        print("arr, dim, i: ", arr, dim, i)
         slc = [slice(None)] * arr.ndim
         slc[dim] = i
+        print("Making return, no problem here and slc", slc)
         return slc
 
     # We use index and dim parameters to create idx
     # idx is in a form that can be used as a NumPy advanced index for scattering of src param. in self
-    idx = [[*np.indices(idx_xsection_shape).reshape(index.ndim - 1, -1),
-            index[make_slice(index, dim, i)].reshape(1, -1)[0]] for i in range(index.shape[dim])]
+    print("idx_xsection_shape: ", idx_xsection_shape)
+    print("index.shape[dim]: ", index.shape[dim])
+    #idx = [[*np.indices(idx_xsection_shape).reshape(index.ndim - 1, -1),
+    #        index[make_slice(index, dim, i)].reshape(1, -1)[0]] for i in range(index.shape[dim])] #baj
+    idx = []
+    for i in range(index.shape[dim]):
+        slc = make_slice(index, dim, i)
+        print("This is the problem: ",slc[0])
+        ind = index[slc[0]].reshape(1, -1)[0]
+        tmp = [*np.indices(idx_xsection_shape).reshape(index.ndim - 1, -1), ind]
+        idx.append(tmp)
+        
     idx = list(np.concatenate(idx, axis=1))
     idx.insert(dim, idx.pop())
 
@@ -65,19 +77,25 @@ for dataset_name, n_classes in zip(dataset_lst, n_classes_lst):
     savepath = os.path.join('code', 'baselines', 'SimCLR', dataset_name)
     if os.path.isdir(savepath) == False:
         os.makedirs(savepath)
-
+    
+    print(f"Making SimCLR datasets for {dataset_name}")
+    
     train_dict = torch.load(os.path.join('datasets', dataset_name, 'train.pt'))
     val_dict = torch.load(os.path.join('datasets', dataset_name, 'val.pt'))
     test_dict = torch.load(os.path.join('datasets', dataset_name, 'test.pt'))
-    np.save(os.path.join(savepath, 'train_x.npy'), train_dict['samples'].transpose(1,2))
-    np.save(os.path.join(savepath, 'test_x.npy'), test_dict['samples'].transpose(1,2))
-    np.save(os.path.join(savepath, 'val_x.npy'), val_dict['samples'].transpose(1,2))
+
+    print("train_dict[samples].shape: ", train_dict["samples"].shape)
+    #print("train_dict[samples].transpose(1,2).shape: ", train_dict["samples"].transpose(1,2).shape)
+
+    np.save(os.path.join(savepath, 'train_x.npy'), torch.tensor(train_dict['samples']).transpose(1,2))
+    np.save(os.path.join(savepath, 'test_x.npy'), torch.tensor(test_dict['samples']).transpose(1,2))
+    np.save(os.path.join(savepath, 'val_x.npy'), torch.tensor(val_dict['samples']).transpose(1,2))
 
     train_y = np.zeros((len(train_dict['labels']), n_classes))
     val_y = np.zeros((len(val_dict['labels']), n_classes))
     test_y = np.zeros((len(test_dict['labels']), n_classes))
-    scatter_numpy(train_y, 1, np.expand_dims(train_dict['labels'].numpy().astype(int), axis=1), 1)
-    scatter_numpy(val_y, 1, np.expand_dims(val_dict['labels'].numpy().astype(int), axis=1), 1)
+    scatter_numpy(train_y, 1, np.expand_dims(train_dict['labels'].numpy().astype(int), axis=1), 1) #baj
+    scatter_numpy(val_y, 1, np.expand_dims(val_dict['labels'].numpy().astype(int), axis=1), 1)  
     scatter_numpy(test_y, 1, np.expand_dims(test_dict['labels'].numpy().astype(int), axis=1), 1)
     np.save(os.path.join(savepath, 'train_y.npy'), train_y)
     np.save(os.path.join(savepath, 'test_y.npy'), test_y)
