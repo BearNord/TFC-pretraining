@@ -114,6 +114,7 @@ class NTXentLoss_poly(torch.nn.Module):
         # filter out the scores from the positive samples
         l_pos = torch.diag(similarity_matrix, self.batch_size)
         r_pos = torch.diag(similarity_matrix, -self.batch_size)
+        
         positives = torch.cat([l_pos, r_pos]).view(2 * self.batch_size, 1)
 
         negatives = similarity_matrix[self.mask_samples_from_same_repr].view(2 * self.batch_size, -1)

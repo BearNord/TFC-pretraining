@@ -27,7 +27,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             # Train and validate
             """Train. In fine-tuning, this part is also trained???"""
             train_loss = model_pretrain(model, model_optimizer, criterion, train_dl, config, device, training_mode)
-            logger.debug(f'\nPre-training Epoch : {epoch}', f'Train Loss : {train_loss:.4f}')
+            logger.debug(f'\nPre-training Epoch : {epoch} \nTrain Loss : {train_loss:.4f}')
 
         os.makedirs(os.path.join(experiment_log_dir, "saved_models"), exist_ok=True)
         chkpoint = {'model_state_dict': model.state_dict()}
@@ -70,6 +70,9 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
                                                              classifier=classifier, classifier_optimizer=classifier_optimizer)
             performance_list.append(performance)
 
+            # Model and classifier learns for 1 epoch. If the classifier's last batch of predictions had higher F1 score, 
+            # than previous highest F1 then save the weights, otherwise revert back to previous 
+
             """Use KNN as another classifier; it's an alternation of the MLP classifier in function model_test. 
             Experiments show KNN and MLP may work differently in different settings, so here we provide both. """
             # train classifier: KNN
@@ -103,7 +106,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
 
     logger.debug("\n################## Training is Done! #########################")
 
-def model_pretrain(model, model_optimizer, criterion, train_loader, config, device, training_mode,):
+def model_pretrain(model, model_optimizer, criterion, train_loader, config, device, training_mode):
     total_loss = []
     model.train()
     global loss, loss_t, loss_f, l_TF, loss_c, data_test, data_f_test
@@ -117,6 +120,9 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
         data_f, aug1_f = data_f.float().to(device), aug1_f.float().to(device)  # aug1 = aug2 : [128, 1, 178]
 
         """Produce embeddings"""
+        # print("Data shape:", data.shape)
+        # print("data_f", data_f.shape)
+        #asdf
         h_t, z_t, h_f, z_f = model(data, data_f)
         h_t_aug, z_t_aug, h_f_aug, z_f_aug = model(aug1, aug1_f)
 
@@ -151,6 +157,26 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
     model.train()
     classifier.train()
 
+    # param_size = 0
+    # for param in model.parameters():
+    #     param_size += param.nelement() * param.element_size()
+    # buffer_size = 0
+    # for buffer in model.buffers():
+    #     buffer_size += buffer.nelement() * buffer.element_size()
+
+    # size_all_mb = (param_size + buffer_size) / 1024**2
+    # print('model size: {:.3f}MB'.format(size_all_mb))
+
+    # param_size = 0
+    # for param in classifier.parameters():
+    #     param_size += param.nelement() * param.element_size()
+    # buffer_size = 0
+    # for buffer in classifier.buffers():
+    #     buffer_size += buffer.nelement() * buffer.element_size()
+
+    # size_all_mb = (param_size + buffer_size) / 1024**2
+    # print('classifier size: {:.3f}MB'.format(size_all_mb))
+
     total_loss = []
     total_acc = []
     total_auc = []  # it should be outside of the loop
@@ -161,13 +187,30 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
     trgs = np.array([])
     feas = np.array([])
 
+    #print("I am here")
     for data, labels, aug1, data_f, aug1_f in val_dl:
+        #print("I am in the loop")
         # print('Fine-tuning: {} of target samples'.format(labels.shape[0]))
         data, labels = data.float().to(device), labels.long().to(device)
         data_f = data_f.float().to(device)
         aug1 = aug1.float().to(device)
         aug1_f = aug1_f.float().to(device)
 
+        verbose = False
+        if verbose == True:
+            t = torch.cuda.get_device_properties(0).total_memory
+            r = torch.cuda.memory_reserved(0)
+            a = torch.cuda.memory_allocated(0)
+            f = r-a  # free inside reserved
+            print(f"Total memory: {t // 1024**2} MB")
+            print(f"Reserved: {r // 1024**2} MB")
+            print(f"allocated: {a // 1024**2} MB")
+            print(f"Free: {f // 1024**2} MB")
+        # print("Memory usage of X_train in MB: ", data.element_size() * data.nelement()//1024**2 )
+        # print("Memory usage of y_train in MB: ", data_f.element_size() * data_f.nelement()//1024**2 )
+        # print("Memory usage of X_train in MB: ", aug1.element_size() * aug1.nelement()//1024**2 )
+        # print("Memory usage of y_train in MB: ", aug1_f.element_size() * aug1_f.nelement()//1024**2 )
+ 
         """if random initialization:"""
         model_optimizer.zero_grad()  # The gradients are zero, but the parameters are still randomly initialized.
         classifier_optimizer.zero_grad()  # the classifier is newly added and randomly initialized
@@ -177,6 +220,8 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
         h_t_aug, z_t_aug, h_f_aug, z_f_aug = model(aug1, aug1_f)
         nt_xent_criterion = NTXentLoss_poly(device, config.target_batch_size, config.Context_Cont.temperature,
                                             config.Context_Cont.use_cosine_similarity)
+        #print("ht shape", h_t.shape)
+        #print("ht_aug shape", h_t_aug.shape)
         loss_t = nt_xent_criterion(h_t, h_t_aug)
         loss_f = nt_xent_criterion(h_f, h_f_aug)
         l_TF = nt_xent_criterion(z_t, z_f)
@@ -188,21 +233,26 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
 
         """Add supervised classifier: 1) it's unique to finetuning. 2) this classifier will also be used in test."""
         fea_concat = torch.cat((z_t, z_f), dim=1)
+        # print(fea_concat.shape, "fccc")
+        # sdcsdc
         predictions = classifier(fea_concat)
         fea_concat_flat = fea_concat.reshape(fea_concat.shape[0], -1)
+        #print("Fea_concat_flat.shape", fea_concat_flat.shape)
+        #print("Labels: ", labels)
         loss_p = criterion(predictions, labels)
 
         lam = 0.1
         loss = loss_p + l_TF + lam*(loss_t + loss_f)
 
         acc_bs = labels.eq(predictions.detach().argmax(dim=1)).float().mean()
-        onehot_label = F.one_hot(labels)
+        #print("Type of labels: ", type(labels))
+        onehot_label = F.one_hot(labels, num_classes = config.num_classes_target)
         pred_numpy = predictions.detach().cpu().numpy()
 
         try:
             auc_bs = roc_auc_score(onehot_label.detach().cpu().numpy(), pred_numpy, average="macro", multi_class="ovr" )
         except:
-            auc_bs = np.float(0)
+            auc_bs = np.float64(0)
         prc_bs = average_precision_score(onehot_label.detach().cpu().numpy(), pred_numpy)
 
         total_acc.append(acc_bs)
@@ -219,10 +269,19 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
             trgs = np.append(trgs, labels.data.cpu().numpy())
             feas = np.append(feas, fea_concat_flat.data.cpu().numpy())
 
+    #print("Feas shape: ", feas.shape)
     feas = feas.reshape([len(trgs), -1])  # produce the learned embeddings
 
+    # print("Dimensions of everything: ")
+    # print("Labels: ", labels.shape)
+    # print("pred_numpy shape: ", pred_numpy.shape)
+    # print("pred numpy:", pred_numpy)
     labels_numpy = labels.detach().cpu().numpy()
     pred_numpy = np.argmax(pred_numpy, axis=1)
+    # print("pred_numpy new shape: ", pred_numpy.shape)
+    print("Predictions: ", pred_numpy)
+    # print("labels: ", labels)
+    # asdf
     precision = precision_score(labels_numpy, pred_numpy, average='macro', )
     recall = recall_score(labels_numpy, pred_numpy, average='macro', )
     F1 = f1_score(labels_numpy, pred_numpy, average='macro', )
@@ -235,7 +294,6 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
           % (ave_loss, ave_acc*100, precision * 100, recall * 100, F1 * 100, ave_auc * 100, ave_prc *100))
 
     return ave_loss, feas, trgs, F1
-
 
 def model_test(model,  test_dl, config,  device, training_mode, classifier=None, classifier_optimizer=None):
     model.eval()
@@ -261,19 +319,22 @@ def model_test(model,  test_dl, config,  device, training_mode, classifier=None,
             h_t, z_t, h_f, z_f = model(data, data_f)
             fea_concat = torch.cat((z_t, z_f), dim=1)
             predictions_test = classifier(fea_concat)
+            #print("Predictions test shape: ", predictions_test.shape)
             fea_concat_flat = fea_concat.reshape(fea_concat.shape[0], -1)
             emb_test_all.append(fea_concat_flat)
 
             loss = criterion(predictions_test, labels)
             acc_bs = labels.eq(predictions_test.detach().argmax(dim=1)).float().mean()
-            onehot_label = F.one_hot(labels)
+            onehot_label = F.one_hot(labels, num_classes = config.num_classes_target)
             pred_numpy = predictions_test.detach().cpu().numpy()
             labels_numpy = labels.detach().cpu().numpy()
             try:
                 auc_bs = roc_auc_score(onehot_label.detach().cpu().numpy(), pred_numpy,
                                    average="macro", multi_class="ovr")
             except:
-                auc_bs = np.float(0)
+                auc_bs = np.float64(0)
+            #print("pred numpy shape: ", pred_numpy.shape)
+            #print("The other shape", onehot_label.detach().cpu().numpy().shape)
             prc_bs = average_precision_score(onehot_label.detach().cpu().numpy(), pred_numpy, average="macro")
             pred_numpy = np.argmax(pred_numpy, axis=1)
 

@@ -1,0 +1,7 @@
+{
+    "terminal.integrated.commandsToSkipShell": [
+    "-workbench.action.terminal.findNext",
+    "-search.action.focusNextSearchResult",
+    "-workbench.action.debug.start"
+    ]
+    } 

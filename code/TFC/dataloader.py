@@ -3,8 +3,9 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import os
 import numpy as np
-from augmentations import DataTransform_FD, DataTransform_TD
+from augmentations import DataTransform_FD, DataTransform_TD, mixup_datasets
 import torch.fft as fft
+import itertools as it
 
 def generate_freq(dataset, config):
     X_train = dataset["samples"]
@@ -30,7 +31,7 @@ def generate_freq(dataset, config):
     else:
         x_data = X_train
 
-    """Transfer x_data to Frequency Domain. If use fft.fft, the output has the same shape; if use fft.rfft, 
+    """Transfer x_data to Frequency Domain. If use fft.fft, the output has the same shape; if use fft.rfft,
     the output shape is half of the time window."""
 
     x_data_f = fft.fft(x_data).abs() #/(window_length) # rfft for real value inputs.
@@ -43,6 +44,11 @@ class Load_Dataset(Dataset):
         self.training_mode = training_mode
         X_train = dataset["samples"]
         y_train = dataset["labels"]
+
+        if isinstance(X_train, np.ndarray):
+            X_train = torch.from_numpy(X_train)
+            y_train = y_train.long()
+
         # shuffle
         data = list(zip(X_train, y_train))
         np.random.shuffle(data)
@@ -66,14 +72,16 @@ class Load_Dataset(Dataset):
             y_train = y_train[:subset_size]
             print('Using subset for debugging, the datasize is:', y_train.shape[0])
 
+        #print("Type of X_train: ", type(X_train))
         if isinstance(X_train, np.ndarray):
             self.x_data = torch.from_numpy(X_train)
             self.y_data = torch.from_numpy(y_train).long()
         else:
             self.x_data = X_train
             self.y_data = y_train
-
-        """Transfer x_data to Frequency Domain. If use fft.fft, the output has the same shape; if use fft.rfft, 
+        #print("Memory usage of X_train in KB: ", X_train.element_size() * X_train.nelement()//1024 )
+        #print("Memory usage of y_train in KB: ", y_train.element_size() * y_train.nelement()//1024 )
+        """Transfer x_data to Frequency Domain. If use fft.fft, the output has the same shape; if use fft.rfft,
         the output shape is half of the time window."""
 
         window_length = self.x_data.shape[-1]
@@ -97,23 +105,74 @@ class Load_Dataset(Dataset):
         return self.len
 
 
-def data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset=True):
-    train_dataset = torch.load(os.path.join(sourcedata_path, "train.pt"))
+def data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset=True, use_mixup=False):
+    # Loading in the torch arrays
+    print(f"The order of the datsets: {sourcedata_path}")
+    train_datasets = [] # If there are multiple datasets for pre.training load in all
+    for source_path in sourcedata_path:
+        new_train_dataset = torch.load(os.path.join(source_path, "train.pt"))
+        train_datasets.append(new_train_dataset)
+
     finetune_dataset = torch.load(os.path.join(targetdata_path, "train.pt"))  # train.pt
     test_dataset = torch.load(os.path.join(targetdata_path, "test.pt"))  # test.pt
-    """In pre-training: 
-    train_dataset: [371055, 1, 178] from SleepEEG.    
+
+     # If there are multiple datasets use mixup method
+    if (len(train_datasets) != 1) & use_mixup:
+        print("use_mixup", use_mixup)
+        alpha = 0.9
+        new_dataset = {"samples" : [], "labels": []}
+        for (dataset_1, dataset_2) in it.combinations(train_datasets,2):
+            mixed_up_set = mixup_datasets(dataset_1, dataset_2, configs, alpha)
+            new_dataset["samples"].append(mixed_up_set["samples"])
+            new_dataset["labels"].append(mixed_up_set["labels"])
+            # print("type and dim of samples and labels: ")
+            # print("samples: ", type(new_dataset["samples"], new_dataset["samples"].shape))
+            # print("samples: ", type(new_dataset["labels"], new_dataset["labels"].shape))
+
+        new_dataset["samples"] = torch.cat(new_dataset["samples"],0)
+        new_dataset["labels"] = torch.cat(new_dataset["labels"],0)
+        # print("new_dataset[samples].shape: ", new_dataset["samples"].shape)
+        # print("new_dataset[labels].shape: ", new_dataset["labels"].shape)
+
+    """In pre-training:
+    train_dataset: [371055, 1, 178] from SleepEEG.
     finetune_dataset: [60, 1, 178], test_dataset: [11420, 1, 178] from Epilepsy"""
 
+    # Creating datasets
     # subset = True # if true, use a subset for debugging.
-    train_dataset = Load_Dataset(train_dataset, configs, training_mode, target_dataset_size=configs.batch_size, subset=subset) # for self-supervised, the data are augmented here
-    finetune_dataset = Load_Dataset(finetune_dataset, configs, training_mode, target_dataset_size=configs.target_batch_size, subset=subset)
+    train_dataset = Load_Dataset(train_datasets.pop(0), configs, training_mode,
+                                    target_dataset_size=configs.target_batch_size, subset=subset)
+
+    finetune_dataset = Load_Dataset(finetune_dataset, configs, training_mode,
+                                    target_dataset_size=configs.target_batch_size, subset=subset)
     test_dataset = Load_Dataset(test_dataset, configs, training_mode,
                                 target_dataset_size=configs.target_batch_size, subset=False)
 
+    # If we we are using mixup then merge the mixed up dataset with the new
+    if (len(train_datasets) != 0) & use_mixup:
+        mixed_dataset = Load_Dataset(new_dataset, configs, training_mode,
+                                    target_dataset_size = configs.target_batch_size, subset=subset)
+        print("I have created and merged mixed up samples with the train dataset")
+        train_dataset = torch.utils.data.ConcatDataset([train_dataset, mixed_dataset])
+
+    # If there are more than one pre_train dataset merge them together
+    skip_additional_datasets = True
+    if not skip_additional_datasets:
+        print("I am not skipping additional datsets")
+        for train_data in train_datasets:
+            # # sub_dataset_size = configs.target_batch_size #//10 * 1
+            # print(f"configs.target_batch_size: {configs.target_batch_size}")
+            # print(f"sub_dataset_size: {sub_dataset_size}")
+            tmp_dataset = Load_Dataset(train_data, configs, training_mode,
+                                    target_dataset_size=configs.target_batch_size, subset=subset)
+
+            train_dataset = torch.utils.data.ConcatDataset([train_dataset, tmp_dataset])
+
+
+    # Creating loaders
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=configs.batch_size,
-                                               shuffle=True, drop_last=configs.drop_last,
-                                               num_workers=0)
+                                                shuffle=True, drop_last=configs.drop_last,
+                                                num_workers=0)
     finetune_loader = torch.utils.data.DataLoader(dataset=finetune_dataset, batch_size=configs.target_batch_size,
                                                shuffle=True, drop_last=configs.drop_last,
                                                num_workers=0)
@@ -121,4 +180,5 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
                                               shuffle=True, drop_last=False,
                                               num_workers=0)
 
+    print("Length of training dataset is: ", len(train_dataset))
     return train_loader, finetune_loader, test_loader

@@ -6,8 +6,8 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 class TFC(nn.Module):
     def __init__(self, configs):
         super(TFC, self).__init__()
-
-        encoder_layers_t = TransformerEncoderLayer(configs.TSlength_aligned, dim_feedforward=2*configs.TSlength_aligned, nhead=2, )
+        print(configs.TSlength_aligned, "aaaaa")
+        encoder_layers_t = TransformerEncoderLayer(configs.TSlength_aligned, dim_feedforward=min(2*configs.TSlength_aligned,1024), nhead=2, )
         self.transformer_encoder_t = TransformerEncoder(encoder_layers_t, 2)
 
         self.projector_t = nn.Sequential(
@@ -17,7 +17,7 @@ class TFC(nn.Module):
             nn.Linear(256, 128)
         )
 
-        encoder_layers_f = TransformerEncoderLayer(configs.TSlength_aligned, dim_feedforward=2*configs.TSlength_aligned,nhead=2,)
+        encoder_layers_f = TransformerEncoderLayer(configs.TSlength_aligned, dim_feedforward=2*min(configs.TSlength_aligned, 1024),nhead=2,)
         self.transformer_encoder_f = TransformerEncoder(encoder_layers_f, 2)
 
         self.projector_f = nn.Sequential(

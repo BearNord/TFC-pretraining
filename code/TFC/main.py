@@ -25,8 +25,9 @@ parser.add_argument('--seed', default=42, type=int, help='seed value')
 parser.add_argument('--training_mode', default='fine_tune_test', type=str,
                     help='pre_train, fine_tune_test')
 
-parser.add_argument('--pretrain_dataset', default='SleepEEG', type=str,
+parser.add_argument('--pretrain_dataset', default='SleepEEG', type=str, nargs = "+",
                     help='Dataset of choice: SleepEEG, FD_A, HAR, ECG')
+
 parser.add_argument('--target_dataset', default='Epilepsy', type=str,
                     help='Dataset of choice: Epilepsy, FD_B, Gesture, EMG')
 
@@ -43,23 +44,35 @@ if with_gpu:
     device = torch.device("cuda")
 else:
     device = torch.device("cpu")
+#device = torch.device("cpu")
+# verbose = True
+# if verbose == True:
+#     t = torch.cuda.get_device_properties(0).total_memory
+#     r = torch.cuda.memory_reserved(0)
+#     a = torch.cuda.memory_allocated(0)
+#     f = r-a  # free inside reserved
+#     print(f"Total memory: {t // 1024**2} MB")
+#     print(f"Reserved: {r // 1024**2} MB")
+#     print(f"allocated: {a // 1024**2} MB")
+#     print(f"Free: {f // 1024**2} MB")
+
+
 print('We are using %s now.' %device)
 
 pretrain_dataset = args.pretrain_dataset
 targetdata = args.target_dataset
 experiment_description = str(pretrain_dataset) + '_2_' + str(targetdata)
 
-
 method = 'TF-C'
 training_mode = args.training_mode
 run_description = args.run_description
 logs_save_dir = args.logs_save_dir
 os.makedirs(logs_save_dir, exist_ok=True)
-exec(f'from config_files.{pretrain_dataset}_Configs import Config as Configs')
+exec(f'from config_files.{pretrain_dataset[0]}_Configs import Config as Configs')
 configs = Configs()
 
 # # ##### fix random seeds for reproducibility ########
-SEED = args.seed
+SEED = 42 #args.seed
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
@@ -87,10 +100,11 @@ logger.debug(f'Mode:    {training_mode}')
 logger.debug("=" * 45)
 
 # Load datasets
-sourcedata_path = f"../../datasets/{pretrain_dataset}"
+sourcedata_path = [f"../../datasets/{pre}" for pre in pretrain_dataset]
 targetdata_path = f"../../datasets/{targetdata}"
-subset = True  # if subset= true, use a subset for debugging.
-train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset)
+subset = False  # if subset= true, use a subset for debugging.
+mixup = False
+train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, use_mixup = mixup)
 logger.debug("Data loaded ...")
 
 # Load Model
@@ -99,6 +113,18 @@ TFC_model = TFC(configs).to(device)
 classifier = target_classifier(configs).to(device)
 temporal_contr_model = None
 
+verbose = False
+if verbose == True:
+    #from torchsummary import summary
+    #summary(TFC_model, input_size=(1, 5120), batch_size=64)
+    t = torch.cuda.get_device_properties(0).total_memory
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    f = r-a  # free inside reserved
+    print(f"Total memory: {t // 1024**2} MB")
+    print(f"Reserved: {r // 1024**2} MB")
+    print(f"allocated: {a // 1024**2} MB")
+    print(f"Free: {f // 1024**2} MB")
 
 if training_mode == "fine_tune_test":
     # load saved model of this experiment

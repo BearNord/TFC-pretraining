@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.fft as fft
 
 def one_hot_encoding(X):
     X = [int(x) for x in X]
@@ -131,3 +132,87 @@ def permutation(x, max_segments=5, seg_mode="random"):
             ret[i] = pat
     return torch.from_numpy(ret)
 
+def mixup_datasets(dataset_left, dataset_right, config, alpha = 0.2):
+    # Administrative steps for dataset handling
+    X_train_left = dataset_left["samples"]
+    X_train_right = dataset_right["samples"]
+
+    y_train_left = dataset_left["labels"]
+    y_train_right = dataset_right["labels"]
+
+    if isinstance(X_train_left, np.ndarray):
+        X_train_left = torch.from_numpy(X_train_left)
+        y_train_left = y_train_left.long()
+    if isinstance(X_train_right, np.ndarray):
+        X_train_right = torch.from_numpy(X_train_right)
+        y_train_right = y_train_right.long()
+
+
+    # shuffle
+    data_left = list(zip(X_train_left, y_train_left))
+    data_right = list(zip(X_train_right, y_train_right))
+
+    np.random.shuffle(data_left)
+    np.random.shuffle(data_right)
+
+    X_train_left, y_train_left = zip(*data_left)
+    X_train_right, y_train_right = zip(*data_right)
+
+    X_train_left, y_train_left = torch.stack(list(X_train_left), dim=0), torch.stack(list(y_train_left), dim=0)
+    X_train_right, y_train_right = torch.stack(list(X_train_right), dim=0), torch.stack(list(y_train_right), dim=0)
+
+    if len(X_train_left.shape) < 3:
+        X_train_left = X_train_left.unsqueeze(2)
+    if X_train_left.shape.index(min(X_train_left.shape)) != 1:  # make sure the Channels in second dim
+        X_train_left = X_train_left.permute(0, 2, 1)
+
+    if len(X_train_right.shape) < 3:
+        X_train_right = X_train_right.unsqueeze(2)
+    if X_train_right.shape.index(min(X_train_right.shape)) != 1:  # make sure the Channels in second dim
+        X_train_right = X_train_right.permute(0, 2, 1)
+
+    # If there are more than one channel take the first
+    X_train_left = X_train_left[:,:1,:] 
+    X_train_right = X_train_right[:,:1,:]
+
+    # print("Shapes after:")
+    # print("X_train_left.shape: ", X_train_left.shape)
+    # print("X_train_right.shape: ", X_train_right.shape)
+
+    """Cast the time-series into frequency domain"""
+    """Align the TS length between source and target datasets"""
+    """ Maybe a random TSLength_aligned segment would be better"""
+    X_train_left = X_train_left[:, :1, :int(config.TSlength_aligned)]
+    X_train_right = X_train_right[:, :1, :int(config.TSlength_aligned)]
+
+    X_left_f = fft.fft(X_train_left).abs()
+    X_right_f = fft.fft(X_train_left).abs()
+    
+    # Generate new points if slow #TODO improve
+    # new_dataset = {"samples": torch.tensor, "labels": torch.LongTensor }
+    new_X = []
+    new_y = []
+    print(f"Generating lambda with alpha: {alpha}")
+    for (x_1, y_1, x_2,y_2) in zip(X_left_f, y_train_left, X_right_f, y_train_right): # For now, the smaller dataset acts as cap 
+        lam = np.random.uniform(0, alpha)
+        x = (lam * x_1 + (1. - lam) * x_2)
+        y = (lam * y_1 + (1. - lam) * y_2)
+
+        if x.shape[1] < int(config.TSlength_aligned):
+            tmp = torch.zeroes(x.shape[0],int(config.TSlength_aligned) - x.shape[1] )
+            x = torch.cat(x,tmp)
+
+        """Cast the data back to time-series domain"""
+        x = fft.ifft(x)
+        x = x.unsqueeze(0)
+
+        new_X.append(x)
+        new_y.append(y)
+
+    #print("type of newX:", type(new_X))
+    mix_dataset = {"samples" : torch.cat(new_X,0), "labels" : torch.tensor(new_y)}
+    # print("mix_dataset samples", type(mix_dataset["samples"]), mix_dataset["samples"].shape)
+    # print("mix_dataset labels", type(mix_dataset["labels"]), mix_dataset["labels"].shape)
+    return mix_dataset
+
+        

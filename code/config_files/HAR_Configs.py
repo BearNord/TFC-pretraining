@@ -32,7 +32,7 @@ class Config(object):
         self.target_batch_size = 42#  84
         self.increased_dim = 1
         self.final_out_channels = 128
-        self.num_classes_target = 2
+        self.num_classes_target = 8 #2
         self.features_len_f = self.features_len
         self.CNNoutput_channel = 28#  104
 
