@@ -119,10 +119,9 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
      # If there are multiple datasets use mixup method
     if (len(train_datasets) != 1) & use_mixup:
         print("use_mixup", use_mixup)
-        alpha = 0.9
         new_dataset = {"samples" : [], "labels": []}
         for (dataset_1, dataset_2) in it.combinations(train_datasets,2):
-            mixed_up_set = mixup_datasets(dataset_1, dataset_2, configs, alpha)
+            mixed_up_set = mixup_datasets(dataset_1, dataset_2, configs)
             new_dataset["samples"].append(mixed_up_set["samples"])
             new_dataset["labels"].append(mixed_up_set["labels"])
             # print("type and dim of samples and labels: ")
@@ -156,7 +155,7 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
         train_dataset = torch.utils.data.ConcatDataset([train_dataset, mixed_dataset])
 
     # If there are more than one pre_train dataset merge them together
-    skip_additional_datasets = True
+    skip_additional_datasets = False
     if not skip_additional_datasets:
         print("I am not skipping additional datsets")
         for train_data in train_datasets:
@@ -177,8 +176,7 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
                                                shuffle=True, drop_last=configs.drop_last,
                                                num_workers=0)
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=configs.target_batch_size,
-                                              shuffle=True, drop_last=False,
+                                              shuffle=True, drop_last=True,
                                               num_workers=0)
 
-    print("Length of training dataset is: ", len(train_dataset))
-    return train_loader, finetune_loader, test_loader
+    return train_loader, test_loader, finetune_loader #finetune_loader, test_loader

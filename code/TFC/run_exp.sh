@@ -1,0 +1,1 @@
+python main.py --training_mode pre_train --pretrain_dataset SleepEEG FD_A  --target_dataset Epilepsy

@@ -194,7 +194,7 @@ def mixup_datasets(dataset_left, dataset_right, config, alpha = 0.2):
     new_y = []
     print(f"Generating lambda with alpha: {alpha}")
     for (x_1, y_1, x_2,y_2) in zip(X_left_f, y_train_left, X_right_f, y_train_right): # For now, the smaller dataset acts as cap 
-        lam = np.random.uniform(0, alpha)
+        lam = np.random.beta(alpha, alpha)
         x = (lam * x_1 + (1. - lam) * x_2)
         y = (lam * y_1 + (1. - lam) * y_2)
 

@@ -112,6 +112,8 @@ class NTXentLoss_poly(torch.nn.Module):
         similarity_matrix = self.similarity_function(representations, representations)
 
         # filter out the scores from the positive samples
+        # print("sim matrix shape: ", similarity_matrix.shape)
+        # print("self.batch_size", self.batch_size)
         l_pos = torch.diag(similarity_matrix, self.batch_size)
         r_pos = torch.diag(similarity_matrix, -self.batch_size)
         

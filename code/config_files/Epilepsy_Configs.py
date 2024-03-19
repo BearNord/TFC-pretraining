@@ -23,7 +23,7 @@ class Config(object):
 
         # data parameters
         self.drop_last = True
-        self.batch_size = 32 #64 #  128
+        self.batch_size = 32 #32 #64 #  128
         self.target_batch_size = 16 # the size of target dataset (the # of samples used to fine-tune).
 
         self.Context_Cont = Context_Cont_configs()

@@ -6,7 +6,6 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 class TFC(nn.Module):
     def __init__(self, configs):
         super(TFC, self).__init__()
-        print(configs.TSlength_aligned, "aaaaa")
         encoder_layers_t = TransformerEncoderLayer(configs.TSlength_aligned, dim_feedforward=min(2*configs.TSlength_aligned,1024), nhead=2, )
         self.transformer_encoder_t = TransformerEncoder(encoder_layers_t, 2)
 

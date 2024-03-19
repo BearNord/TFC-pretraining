@@ -37,6 +37,8 @@ parser.add_argument('--device', default='cuda', type=str,
                     help='cpu or cuda')
 parser.add_argument('--home_path', default=home_dir, type=str,
                     help='Project home directory')
+parser.add_argument('--use_mixup', default=False, type=bool,
+                    help='The use of mixup strategy during pre-train if there are two or more pre-train dataset')
 args, unknown = parser.parse_known_args()
 
 with_gpu = torch.cuda.is_available()
@@ -44,7 +46,7 @@ if with_gpu:
     device = torch.device("cuda")
 else:
     device = torch.device("cpu")
-#device = torch.device("cpu")
+# device = torch.device("cpu")
 # verbose = True
 # if verbose == True:
 #     t = torch.cuda.get_device_properties(0).total_memory
@@ -65,7 +67,7 @@ experiment_description = str(pretrain_dataset) + '_2_' + str(targetdata)
 
 method = 'TF-C'
 training_mode = args.training_mode
-run_description = args.run_description
+run_description = args.run_description + '_mixup_' + str(args.use_mixup)
 logs_save_dir = args.logs_save_dir
 os.makedirs(logs_save_dir, exist_ok=True)
 exec(f'from config_files.{pretrain_dataset[0]}_Configs import Config as Configs')
@@ -103,7 +105,7 @@ logger.debug("=" * 45)
 sourcedata_path = [f"../../datasets/{pre}" for pre in pretrain_dataset]
 targetdata_path = f"../../datasets/{targetdata}"
 subset = False  # if subset= true, use a subset for debugging.
-mixup = False
+mixup = True
 train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, use_mixup = mixup)
 logger.debug("Data loaded ...")
 
