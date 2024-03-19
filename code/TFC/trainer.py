@@ -139,7 +139,7 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
         loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3)
 
         lam = 0.2
-        loss = lam*(loss_t + loss_f) + l_TF
+        loss = lam*(loss_t + loss_f) + (1 - lam)*loss_c  #l_TF
 
         total_loss.append(loss.item())
         loss.backward()
@@ -242,7 +242,7 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
         loss_p = criterion(predictions, labels)
 
         lam = 0.1
-        loss = loss_p + l_TF + lam*(loss_t + loss_f)
+        loss = loss_p + l_TF + lam*(loss_t + loss_f) # I don't think this is right
 
         acc_bs = labels.eq(predictions.detach().argmax(dim=1)).float().mean()
         #print("Type of labels: ", type(labels))

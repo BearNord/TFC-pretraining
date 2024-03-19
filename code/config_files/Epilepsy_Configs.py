@@ -18,8 +18,8 @@ class Config(object):
         # optimizer parameters
         self.beta1 = 0.9
         self.beta2 = 0.99
-        self.lr = 3e-4  # original lr: 3e-4
-        self.lr_f = 3e-4
+        self.lr = 3e-5  # original lr: 3e-4
+        self.lr_f = 3e-5
 
         # data parameters
         self.drop_last = True
