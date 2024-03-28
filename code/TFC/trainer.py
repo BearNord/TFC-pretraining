@@ -1,6 +1,7 @@
 import os
 import sys
 sys.path.append("..")
+import wandb
 
 from loss import *
 from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix, \
@@ -42,6 +43,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
         total_f1 = []
         KNN_f1 = []
         global emb_finetune, label_finetune, emb_test, label_test
+        update_counter = 0
 
         for epoch in range(1, config.num_epoch + 1):
             logger.debug(f'\nEpoch : {epoch}')
@@ -56,6 +58,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             arch = 'sleepedf2eplipsy'
             if len(total_f1) == 0 or F1 > max(total_f1):
                 print('update fine-tuned model')
+                update_counter += 1
                 os.makedirs('experiments_logs/finetunemodel/', exist_ok=True)
                 torch.save(model.state_dict(), 'experiments_logs/finetunemodel/' + arch + '_model.pt')
                 torch.save(classifier.state_dict(), 'experiments_logs/finetunemodel/' + arch + '_classifier.pt')
@@ -103,6 +106,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
               '| AUPRC=%.4f' % (best_performance[0], best_performance[1], best_performance[2], best_performance[3],
                                 best_performance[4], best_performance[5]))
         print('Best KNN F1', max(KNN_f1))
+        print("Total number of updates to weights: ", update_counter)
 
     logger.debug("\n################## Training is Done! #########################")
 
@@ -139,15 +143,24 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
         loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3)
 
         lam = 0.2
-        loss = lam*(loss_t + loss_f) + (1 - lam)*loss_c  #l_TF
+        loss = lam*(loss_t + loss_f) + l_TF # (1 - lam)*loss_c  
+
 
         total_loss.append(loss.item())
         loss.backward()
         model_optimizer.step()
-
+    
     print('Pretraining: overall loss:{}, l_t: {}, l_f:{}, l_c:{}'.format(loss, loss_t, loss_f, l_TF))
 
     ave_loss = torch.tensor(total_loss).mean()
+
+    wandb.log({"pre_train/loss_t" : loss_t,
+                   "pre_train/loss_f" : loss_f,
+                   "pre_train/l_TF" : l_TF,
+                   "pre_train/loss_c" : loss_c, 
+                   "pre_train/loss" : ave_loss
+                   }
+                  ) # Is this okay here? 
 
     return ave_loss
 
@@ -242,10 +255,10 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
         loss_p = criterion(predictions, labels)
 
         lam = 0.1
-        loss = loss_p + l_TF + lam*(loss_t + loss_f) # I don't think this is right
+        loss = loss_p  + lam*(loss_t + loss_f) #+ l_TF # I don't think this is right
 
         acc_bs = labels.eq(predictions.detach().argmax(dim=1)).float().mean()
-        #print("Type of labels: ", type(labels))
+
         onehot_label = F.one_hot(labels, num_classes = config.num_classes_target)
         pred_numpy = predictions.detach().cpu().numpy()
 
@@ -269,19 +282,20 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
             trgs = np.append(trgs, labels.data.cpu().numpy())
             feas = np.append(feas, fea_concat_flat.data.cpu().numpy())
 
-    #print("Feas shape: ", feas.shape)
+    wandb.log({"fine_tune/losses/loss_t" : loss_t,
+                   "fine_tune/losses/loss_f" : loss_f,
+                   "fine_tune/losses/loss_c" : loss_p, 
+                   "fine_tune/losses/loss" : loss
+                   }
+                  ) # Is this okay here? 
+
     feas = feas.reshape([len(trgs), -1])  # produce the learned embeddings
 
-    # print("Dimensions of everything: ")
-    # print("Labels: ", labels.shape)
-    # print("pred_numpy shape: ", pred_numpy.shape)
-    # print("pred numpy:", pred_numpy)
     labels_numpy = labels.detach().cpu().numpy()
     pred_numpy = np.argmax(pred_numpy, axis=1)
-    # print("pred_numpy new shape: ", pred_numpy.shape)
-    print("Predictions: ", pred_numpy)
-    # print("labels: ", labels)
-    # asdf
+
+    print("Predictions during fine_tune: ", pred_numpy)
+ 
     precision = precision_score(labels_numpy, pred_numpy, average='macro', )
     recall = recall_score(labels_numpy, pred_numpy, average='macro', )
     F1 = f1_score(labels_numpy, pred_numpy, average='macro', )
@@ -289,6 +303,16 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
     ave_acc = torch.tensor(total_acc).mean()
     ave_auc = torch.tensor(total_auc).mean()
     ave_prc = torch.tensor(total_prc).mean()
+
+    wandb.log({
+        "fine_tune/metrics/ave_loss" : ave_loss,
+        "fine_tune/metrics/ave_acc" : ave_acc*100,
+        "fine_tune/metrics/precision" : precision*100,
+        "fine_tune/metrics/recall" : recall*100,
+        "fine_tune/metrics/F1" : F1*100,
+        "fine_tune/metrics/ave_auc" : ave_auc*100, 
+        "fine_tune/metrics/ave_prc" : ave_prc*100
+    })
 
     print(' Finetune: loss = %.4f| Acc=%.4f | Precision = %.4f | Recall = %.4f | F1 = %.4f| AUROC=%.4f | AUPRC = %.4f'
           % (ave_loss, ave_acc*100, precision * 100, recall * 100, F1 * 100, ave_auc * 100, ave_prc *100))
@@ -337,6 +361,7 @@ def model_test(model,  test_dl, config,  device, training_mode, classifier=None,
             #print("The other shape", onehot_label.detach().cpu().numpy().shape)
             prc_bs = average_precision_score(onehot_label.detach().cpu().numpy(), pred_numpy, average="macro")
             pred_numpy = np.argmax(pred_numpy, axis=1)
+            
 
             total_acc.append(acc_bs)
             total_auc.append(auc_bs)
@@ -348,6 +373,9 @@ def model_test(model,  test_dl, config,  device, training_mode, classifier=None,
             trgs = np.append(trgs, labels.data.cpu().numpy())
             labels_numpy_all = np.concatenate((labels_numpy_all, labels_numpy))
             pred_numpy_all = np.concatenate((pred_numpy_all, pred_numpy))
+        print("Predictions during test: ", pred_numpy)
+        # print("Real labels during test", labels)
+
     labels_numpy_all = labels_numpy_all[1:]
     pred_numpy_all = pred_numpy_all[1:]
 
@@ -362,6 +390,15 @@ def model_test(model,  test_dl, config,  device, training_mode, classifier=None,
     total_acc = torch.tensor(total_acc).mean()
     total_auc = torch.tensor(total_auc).mean()
     total_prc = torch.tensor(total_prc).mean()
+
+    wandb.log({
+        "test/metrics/Acc" : acc*100,
+        "test/metrics/precision" : precision*100,
+        "test/metrics/recall" : recall*100,
+        "test/metrics/F1" : F1*100,
+        "test/metrics/total_auc" : total_auc*100, 
+        "test/metrics/total_prc" : total_prc*100
+    })
 
     performance = [acc * 100, precision * 100, recall * 100, F1 * 100, total_auc * 100, total_prc * 100]
     print('MLP Testing: Acc=%.4f| Precision = %.4f | Recall = %.4f | F1 = %.4f | AUROC= %.4f | AUPRC=%.4f'

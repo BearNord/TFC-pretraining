@@ -5,10 +5,10 @@ import numpy as np
 from datetime import datetime
 import argparse
 from utils import _logger
-from model import *
+from conv_model import *
 from dataloader import data_generator
 from trainer import Trainer
-
+import wandb
 
 
 
@@ -37,7 +37,7 @@ parser.add_argument('--device', default='cuda', type=str,
                     help='cpu or cuda')
 parser.add_argument('--home_path', default=home_dir, type=str,
                     help='Project home directory')
-parser.add_argument('--use_mixup', default=False, type=bool,
+parser.add_argument('--use_mixup', default="False", type=str,
                     help='The use of mixup strategy during pre-train if there are two or more pre-train dataset')
 args, unknown = parser.parse_known_args()
 
@@ -47,23 +47,14 @@ if with_gpu:
 else:
     device = torch.device("cpu")
 # device = torch.device("cpu")
-# verbose = True
-# if verbose == True:
-#     t = torch.cuda.get_device_properties(0).total_memory
-#     r = torch.cuda.memory_reserved(0)
-#     a = torch.cuda.memory_allocated(0)
-#     f = r-a  # free inside reserved
-#     print(f"Total memory: {t // 1024**2} MB")
-#     print(f"Reserved: {r // 1024**2} MB")
-#     print(f"allocated: {a // 1024**2} MB")
-#     print(f"Free: {f // 1024**2} MB")
+
 
 
 print('We are using %s now.' %device)
 
 pretrain_dataset = args.pretrain_dataset
 targetdata = args.target_dataset
-experiment_description = str(pretrain_dataset) + '_2_' + str(targetdata)
+experiment_description = str(pretrain_dataset) + '_2_' + str(targetdata) + '_conv'
 
 method = 'TF-C'
 training_mode = args.training_mode
@@ -105,8 +96,26 @@ logger.debug("=" * 45)
 sourcedata_path = [f"../../datasets/{pre}" for pre in pretrain_dataset]
 targetdata_path = f"../../datasets/{targetdata}"
 subset = False  # if subset= true, use a subset for debugging.
-mixup = args.use_mixup
+mixup = False if args.use_mixup == "False" else True
 print("Are we using mixup? ", mixup)
+
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="TFC_pre-training",
+    
+    name = experiment_description + '_' + training_mode + '_' + str(mixup),
+    # track hyperparameters and run metadata
+    config = configs
+)
+
+wandb.log({"experiment_dir" : experiment_log_dir,
+            "pre_train_dataset" : pretrain_dataset,
+            "target_dataset" : targetdata,
+            "method" : method, 
+            "mode" : training_mode,
+            "mixup" : mixup,
+            "subset" : subset})
+
 train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, use_mixup = mixup)
 logger.debug("Data loaded ...")
 
@@ -133,6 +142,9 @@ if training_mode == "fine_tune_test":
     # load saved model of this experiment
     load_from = os.path.join(os.path.join(logs_save_dir, experiment_description, run_description,
     f"pre_train_seed_{SEED}_2layertransformer", "saved_models"))
+
+    wandb.log({"pre_trained_model_dir" : load_from})
+
     print("The loading file path", load_from)
     chkpoint = torch.load(os.path.join(load_from, "ckp_last.pt"), map_location=device)
     pretrained_dict = chkpoint["model_state_dict"]
@@ -146,3 +158,5 @@ Trainer(TFC_model, model_optimizer, classifier, classifier_optimizer, train_dl, 
         logger, configs, experiment_log_dir, training_mode)
 
 logger.debug(f"Training time is : {datetime.now()-start_time}")
+
+wandb.finish()

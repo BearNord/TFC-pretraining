@@ -62,7 +62,7 @@ class Load_Dataset(Dataset):
             X_train = X_train.permute(0, 2, 1)
 
         """Align the TS length between source and target datasets"""
-        X_train = X_train[:, :1, :int(config.TSlength_aligned)] # take the first 178 samples
+        X_train = self.adjust_ts_length(X_train, config.TSlength_aligned) # take the first 178 samples
 
         """Subset for debugging"""
         if subset == True:
@@ -92,6 +92,28 @@ class Load_Dataset(Dataset):
         if training_mode == "pre_train":  # no need to apply Augmentations in other modes
             self.aug1 = DataTransform_TD(self.x_data, config)
             self.aug1_f = DataTransform_FD(self.x_data_f, config) # [7360, 1, 90]
+
+    def adjust_ts_length(self, X_train, length):
+
+        if X_train.shape[2] >= length:
+            return X_train[:, :1, :int(length)]  # X_train[:, :1, :int(config.TSlength_aligned)]
+
+        # Otherwise the dataset's time-series length isn't long enough
+        # Create the Fourier-transform
+        x_data_f = fft.fft(X_train)
+
+        # Put 0's to the end of the Fourier representation
+        shape = list(x_data_f.shape)
+        shape[2] = length - x_data_f.shape[2]
+        filler = torch.zeros(shape)
+
+        x_data_f = torch.cat((x_data_f, filler), 2)
+
+        # Cast it back to time-series
+        x_data_t = fft.ifft(x_data_f)
+        x_data_t = x_data_t.real
+
+        return x_data_t
 
     def __getitem__(self, index):
         if self.training_mode == "pre_train":
@@ -157,7 +179,7 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
     # If there are more than one pre_train dataset merge them together
     skip_additional_datasets = False
     if not skip_additional_datasets:
-        print("I am not skipping additional datsets")
+        print("I am not skipping additional datasets")
         for train_data in train_datasets:
             # # sub_dataset_size = configs.target_batch_size #//10 * 1
             # print(f"configs.target_batch_size: {configs.target_batch_size}")
@@ -179,4 +201,4 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
                                               shuffle=True, drop_last=True,
                                               num_workers=0)
 
-    return train_loader, test_loader, finetune_loader #finetune_loader, test_loader
+    return train_loader, test_loader, finetune_loader 

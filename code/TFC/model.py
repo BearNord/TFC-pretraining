@@ -36,7 +36,9 @@ class TFC(nn.Module):
         z_time = self.projector_t(h_time)
 
         """Frequency-based contrastive encoder"""
+        # print("frequency shape before transformer", x_in_t.shape)
         f = self.transformer_encoder_f(x_in_f)
+        # print("frequency shape after tranformer: ", x.shape)
         h_freq = f.reshape(f.shape[0], -1)
 
         """Cross-space projector"""

@@ -10,14 +10,14 @@ class Config(object):
         self.dropout = 0.35
 
 
-        self.kernel_size = 25
-        self.stride = 3
+        self.kernel_size = 8 #25
+        self.stride = 8 #3
         self.features_len = 127
         self.features_len_f = self.features_len
 
         self.TSlength_aligned = 178
 
-        self.CNNoutput_channel = 10 # 90 # 10 for Epilepsy model
+        self.CNNoutput_channel = 5 # 90 # 10 for Epilepsy model
 
         # training configs
         self.num_epoch = 40
@@ -32,7 +32,7 @@ class Config(object):
 
         # data parameters
         self.drop_last = True
-        self.batch_size = 128
+        self.batch_size = 64 #128
         """For Epilepsy, the target batchsize is 60"""
         self.target_batch_size = 60   # the size of target dataset (the # of samples used to fine-tune).
 

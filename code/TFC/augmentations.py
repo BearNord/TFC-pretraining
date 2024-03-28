@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.fft as fft
+import wandb
 
 def one_hot_encoding(X):
     X = [int(x) for x in X]
@@ -188,11 +189,12 @@ def mixup_datasets(dataset_left, dataset_right, config, alpha = 0.2):
     X_left_f = fft.fft(X_train_left).abs()
     X_right_f = fft.fft(X_train_left).abs()
     
-    # Generate new points if slow #TODO improve
+    # Generate new points if slow #TODO improves
     # new_dataset = {"samples": torch.tensor, "labels": torch.LongTensor }
     new_X = []
     new_y = []
     print(f"Generating lambda with alpha: {alpha}")
+    wandb.log({'mixup/distribution_type' : "beta", 'mixup/alpha' : alpha})
     for (x_1, y_1, x_2,y_2) in zip(X_left_f, y_train_left, X_right_f, y_train_right): # For now, the smaller dataset acts as cap 
         lam = np.random.beta(alpha, alpha)
         x = (lam * x_1 + (1. - lam) * x_2)
