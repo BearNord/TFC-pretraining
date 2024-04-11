@@ -13,7 +13,7 @@ class Config(object):
         self.features_len_f = 24 # 13 #self.features_len   # the output results in time domain
 
         # training configs
-        self.num_epoch = 40 # 40
+        self.num_epoch = 200 # 40
         
         # optimizer parameters
         self.optimizer = "adam"

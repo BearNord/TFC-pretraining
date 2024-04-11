@@ -33,12 +33,17 @@ parser.add_argument('--target_dataset', default='Epilepsy', type=str,
 
 parser.add_argument('--logs_save_dir', default='../experiments_logs', type=str,
                     help='saving directory')
+
 parser.add_argument('--device', default='cuda', type=str,
                     help='cpu or cuda')
+
 parser.add_argument('--home_path', default=home_dir, type=str,
                     help='Project home directory')
+
 parser.add_argument('--use_mixup', default="False", type=str,
                     help='The use of mixup strategy during pre-train if there are two or more pre-train dataset')
+
+
 args, unknown = parser.parse_known_args()
 
 with_gpu = torch.cuda.is_available()
@@ -65,7 +70,7 @@ exec(f'from config_files.{pretrain_dataset[0]}_Configs import Config as Configs'
 configs = Configs()
 
 # # ##### fix random seeds for reproducibility ########
-SEED = 42 #args.seed
+SEED = args.seed
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
@@ -103,7 +108,7 @@ wandb.init(
     # set the wandb project where this run will be logged
     project="TFC_pre-training",
     
-    name = experiment_description + '_' + training_mode + '_' + str(mixup),
+    name = experiment_description + '_' + training_mode + '_' + str(mixup) + '_' + str(SEED),
     # track hyperparameters and run metadata
     config = configs
 )
@@ -114,7 +119,8 @@ wandb.log({"experiment_dir" : experiment_log_dir,
             "method" : method, 
             "mode" : training_mode,
             "mixup" : mixup,
-            "subset" : subset})
+            "subset" : subset,
+            "seed": SEED})
 
 train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, use_mixup = mixup)
 logger.debug("Data loaded ...")
@@ -141,7 +147,7 @@ if verbose == True:
 if training_mode == "fine_tune_test":
     # load saved model of this experiment
     load_from = os.path.join(os.path.join(logs_save_dir, experiment_description, run_description,
-    f"pre_train_seed_{SEED}_2layertransformer", "saved_models"))
+    f"pre_train_seed_{420}_2layertransformer", "saved_models")) #SEED
 
     wandb.log({"pre_trained_model_dir" : load_from})
 

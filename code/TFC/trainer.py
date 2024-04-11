@@ -22,9 +22,13 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
 
     criterion = nn.CrossEntropyLoss()
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(model_optimizer, 'min')
+    global step
+    
     if training_mode == 'pre_train':
         print('Pretraining on source dataset')
         for epoch in range(1, config.num_epoch + 1):
+            step = epoch
+            step += 1
             # Train and validate
             """Train. In fine-tuning, this part is also trained???"""
             train_loss = model_pretrain(model, model_optimizer, criterion, train_dl, config, device, training_mode)
@@ -43,10 +47,13 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
         total_f1 = []
         KNN_f1 = []
         global emb_finetune, label_finetune, emb_test, label_test
+
         update_counter = 0
 
         for epoch in range(1, config.num_epoch + 1):
             logger.debug(f'\nEpoch : {epoch}')
+            step = epoch
+            step += 1
 
             valid_loss, emb_finetune, label_finetune, F1 = model_finetune(model, model_optimizer, valid_dl, config,
                                   device, training_mode, classifier=classifier, classifier_optimizer=classifier_optimizer)
@@ -159,7 +166,8 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
                    "pre_train/l_TF" : l_TF,
                    "pre_train/loss_c" : loss_c, 
                    "pre_train/loss" : ave_loss
-                   }
+                   }, 
+                   step = step
                   ) # Is this okay here? 
 
     return ave_loss
@@ -286,7 +294,8 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
                    "fine_tune/losses/loss_f" : loss_f,
                    "fine_tune/losses/loss_c" : loss_p, 
                    "fine_tune/losses/loss" : loss
-                   }
+                   },
+                   step = step
                   ) # Is this okay here? 
 
     feas = feas.reshape([len(trgs), -1])  # produce the learned embeddings
@@ -312,7 +321,8 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
         "fine_tune/metrics/F1" : F1*100,
         "fine_tune/metrics/ave_auc" : ave_auc*100, 
         "fine_tune/metrics/ave_prc" : ave_prc*100
-    })
+    }, 
+    step = step )
 
     print(' Finetune: loss = %.4f| Acc=%.4f | Precision = %.4f | Recall = %.4f | F1 = %.4f| AUROC=%.4f | AUPRC = %.4f'
           % (ave_loss, ave_acc*100, precision * 100, recall * 100, F1 * 100, ave_auc * 100, ave_prc *100))

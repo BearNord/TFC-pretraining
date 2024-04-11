@@ -113,7 +113,7 @@ class Load_Dataset(Dataset):
         x_data_t = fft.ifft(x_data_f)
         x_data_t = x_data_t.real
 
-        return x_data_t
+        return x_data_t[:, :1, :int(length)]
 
     def __getitem__(self, index):
         if self.training_mode == "pre_train":
