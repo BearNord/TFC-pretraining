@@ -26,7 +26,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
     
     if training_mode == 'pre_train':
         print('Pretraining on source dataset')
-        for epoch in range(1, config.num_epoch + 1):
+        for epoch in range(1, config.pre_train_num_epoch + 1):
             step = epoch
             step += 1
             # Train and validate
@@ -50,7 +50,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
 
         update_counter = 0
 
-        for epoch in range(1, config.num_epoch + 1):
+        for epoch in range(1, config.fine_tune_num_epoch + 1):
             logger.debug(f'\nEpoch : {epoch}')
             step = epoch
             step += 1
@@ -66,7 +66,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             if len(total_f1) == 0 or F1 > max(total_f1):
                 print('update fine-tuned model')
                 update_counter += 1
-                os.makedirs('experiments_logs/finetunemodel/', exist_ok=True)
+                os.makedirs(os.path.join(experiment_log_dir,'finetunemodel'), exist_ok=True) #, os.path.join(experiment_log_dir,finetunemodel)  exist_ok=True
                 torch.save(model.state_dict(), 'experiments_logs/finetunemodel/' + arch + '_model.pt')
                 torch.save(classifier.state_dict(), 'experiments_logs/finetunemodel/' + arch + '_classifier.pt')
             total_f1.append(F1)
@@ -106,6 +106,8 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             print('KNN Testing: Acc=%.4f| Precision = %.4f | Recall = %.4f | F1 = %.4f | AUROC= %.4f | AUPRC=%.4f'%
                   (knn_acc, precision, recall, F1, auc, prc))
             KNN_f1.append(F1)
+        torch.save(model.state_dict(), os.path.join(experiment_log_dir,'finetunemodel/' + arch + '_model.pt'))
+        torch.save(classifier.state_dict(), os.path.join(experiment_log_dir,'finetunemodel/' + arch + '_classifier.pt'))
         logger.debug("\n################## Best testing performance! #########################")
         performance_array = np.array(performance_list)
         best_performance = performance_array[np.argmax(performance_array[:,0], axis=0)]
@@ -114,6 +116,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
                                 best_performance[4], best_performance[5]))
         print('Best KNN F1', max(KNN_f1))
         print("Total number of updates to weights: ", update_counter)
+
 
     logger.debug("\n################## Training is Done! #########################")
 
