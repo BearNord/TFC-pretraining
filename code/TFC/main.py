@@ -43,6 +43,9 @@ parser.add_argument('--home_path', default=home_dir, type=str,
 parser.add_argument('--use_mixup', default="False", type=str,
                     help='The use of mixup strategy during pre-train if there are two or more pre-train dataset')
 
+parser.add_argument('--tags', default="", type=str,
+                    help='Tags for wandb.')
+
 
 args, unknown = parser.parse_known_args()
 
@@ -103,14 +106,17 @@ targetdata_path = f"../../datasets/{targetdata}"
 subset = False  # if subset= true, use a subset for debugging.
 mixup = False if args.use_mixup == "False" else True
 print("Are we using mixup? ", mixup)
+tags = args.tags.split(',') if args.tags != "" else []
 
 wandb.init(
     # set the wandb project where this run will be logged
+    entity="marauders",
     project="TFC_pre-training",
     
     name = experiment_description + '_' + training_mode + '_' + str(mixup) + '_' + str(SEED),
     # track hyperparameters and run metadata
-    config = configs
+    config = configs,
+    tags=tags
 )
 
 wandb.log({"experiment_dir" : experiment_log_dir,
