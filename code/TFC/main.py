@@ -46,6 +46,10 @@ parser.add_argument('--use_mixup', default="False", type=str,
 parser.add_argument('--tags', default="", type=str,
                     help='Tags for wandb.')
 
+parser.add_argument('--pre_train_seed', default=42, type=str,
+                    help='Which pre-train seed to use for fine_tune model')
+
+
 
 args, unknown = parser.parse_known_args()
 
@@ -107,6 +111,7 @@ subset = False  # if subset= true, use a subset for debugging.
 mixup = False if args.use_mixup == "False" else True
 print("Are we using mixup? ", mixup)
 tags = args.tags.split(',') if args.tags != "" else []
+pre_train_seed = args.pre_train_seed
 
 wandb.init(
     # set the wandb project where this run will be logged
@@ -153,7 +158,7 @@ if verbose == True:
 if training_mode == "fine_tune_test":
     # load saved model of this experiment
     load_from = os.path.join(os.path.join(logs_save_dir, experiment_description, run_description,
-    f"pre_train_seed_{420}_2layertransformer", "saved_models")) #SEED
+    f"pre_train_seed_{pre_train_seed}_2layertransformer", "saved_models")) #SEED
 
     wandb.log({"pre_trained_model_dir" : load_from})
 
