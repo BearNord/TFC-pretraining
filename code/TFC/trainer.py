@@ -67,15 +67,15 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
                 print('update fine-tuned model')
                 update_counter += 1
                 os.makedirs(os.path.join(experiment_log_dir,'finetunemodel'), exist_ok=True) #, os.path.join(experiment_log_dir,finetunemodel)  exist_ok=True
-                torch.save(model.state_dict(), 'experiments_logs/finetunemodel/' + arch + '_model.pt')
-                torch.save(classifier.state_dict(), 'experiments_logs/finetunemodel/' + arch + '_classifier.pt')
+                torch.save(model.state_dict(), os.path.join(experiment_log_dir,'finetunemodel/' + arch + '_model.pt'))
+                torch.save(classifier.state_dict(), os.path.join(experiment_log_dir,'finetunemodel/' + arch + '_classifier.pt'))
             total_f1.append(F1)
 
             # evaluate on the test set
             """Testing set"""
             logger.debug('Test on Target datasts test set')
-            model.load_state_dict(torch.load('experiments_logs/finetunemodel/' + arch + '_model.pt'))
-            classifier.load_state_dict(torch.load('experiments_logs/finetunemodel/' + arch + '_classifier.pt'))
+            model.load_state_dict(torch.load( os.path.join(experiment_log_dir,'finetunemodel/' + arch + '_model.pt')))
+            classifier.load_state_dict(torch.load(os.path.join(experiment_log_dir,'finetunemodel/' + arch + '_classifier.pt')))
             test_loss, test_acc, test_auc, test_prc, emb_test, label_test, performance = model_test(model, test_dl, config, device, training_mode,
                                                              classifier=classifier, classifier_optimizer=classifier_optimizer)
             performance_list.append(performance)
