@@ -16,6 +16,8 @@ code/baselines/SimCLR/EMG
 code/baselines/SimCLR/ECG
 code/baselines/TS2vec/datasets
 code/TFC/wandb
+artifacts
+wandb
 *.log
 *.pt
 *.zip
