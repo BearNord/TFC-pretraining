@@ -10,8 +10,6 @@ from dataloader import data_generator
 from trainer import Trainer
 import wandb
 
-
-
 # Args selections
 start_time = datetime.now()
 parser = argparse.ArgumentParser()
@@ -19,6 +17,7 @@ parser = argparse.ArgumentParser()
 home_dir = os.getcwd()
 parser.add_argument('--run_description', default='run1', type=str,
                     help='Experiment Description')
+
 parser.add_argument('--seed', default=42, type=int, help='seed value')
 
 # 1. self_supervised pre_train; 2. finetune (itself contains finetune and test)
@@ -73,7 +72,7 @@ training_mode = args.training_mode
 run_description = args.run_description # + '_mixup_' + str(args.use_mixup)
 logs_save_dir = args.logs_save_dir
 os.makedirs(logs_save_dir, exist_ok=True)
-exec(f'from config_files.{pretrain_dataset[0]}_Configs import Config as Configs')
+exec(f'from config_files.{pretrain_dataset[0]}_Configs import Config as Configs') #TODO change this, so it depends only on the fine_tune dataset
 configs = Configs()
 
 # # ##### fix random seeds for reproducibility ########
@@ -130,6 +129,7 @@ wandb.log({"experiment_dir" : experiment_log_dir,
             "method" : method, 
             "mode" : training_mode,
             "mixup" : mixup,
+            "alpha" : configs.alpha,
             "subset" : subset,
             "seed": SEED})
 
@@ -172,7 +172,7 @@ classifier_optimizer = torch.optim.Adam(classifier.parameters(), lr=configs.lr, 
 
 # Trainer
 Trainer(TFC_model, model_optimizer, classifier, classifier_optimizer, train_dl, valid_dl, test_dl, device,
-        logger, configs, experiment_log_dir, training_mode)
+        logger, configs, experiment_log_dir, training_mode, use_mixup = mixup)
 
 logger.debug(f"Training time is : {datetime.now()-start_time}")
 
