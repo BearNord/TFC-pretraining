@@ -20,8 +20,8 @@ class Config(object):
         self.CNNoutput_channel = 5 # 90 # 10 for Epilepsy model
 
         # training configs
-        self.fine_tune_num_epoch = 100 #40
-        self.pre_train_num_epoch = 100 #40
+        self.fine_tune_num_epoch = 2 #100 #40
+        self.pre_train_num_epoch = 2 # 100 #40
 
         # optimizer parameters
         self.optimizer = 'adam'
@@ -39,6 +39,9 @@ class Config(object):
         self.Context_Cont = Context_Cont_configs()
         self.TC = TC()
         self.augmentation = augmentations()
+
+        # mixup paremeters
+        self.alpha = 2
 
 class augmentations(object):
     def __init__(self):

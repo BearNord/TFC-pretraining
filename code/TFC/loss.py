@@ -84,7 +84,7 @@ class NTXentLoss_poly(torch.nn.Module):
             return self._dot_simililarity
 
     def _get_correlated_mask(self):
-        diag = np.eye(2 * self.batch_size)
+        diag = np.eye(2 * self.batch_size)    # Main diagonal 
         l1 = np.eye((2 * self.batch_size), 2 * self.batch_size, k=-self.batch_size)
         l2 = np.eye((2 * self.batch_size), 2 * self.batch_size, k=self.batch_size)
         mask = torch.from_numpy((diag + l1 + l2))
@@ -100,41 +100,76 @@ class NTXentLoss_poly(torch.nn.Module):
         return v
 
     def _cosine_simililarity(self, x, y):
-        # x shape: (N, 1, C)
-        # y shape: (1, 2N, C)
-        # v shape: (N, 2N)
+        # x shape: (N, 1, C)   
+        # y shape: (1, 2N, C) actually (1,N,C)
+        # v shape: (N, 2N)             (N,N)?
+        # print("shape of x: ", x.unsqueeze(1).shape)
+        # print("shape of y: ", y.unsqueeze(0).shape)
         v = self._cosine_similarity(x.unsqueeze(1), y.unsqueeze(0))
         return v
 
     def forward(self, zis, zjs):
         representations = torch.cat([zjs, zis], dim=0)
 
+        # print("Incoming dimensions: ", zis.shape, zjs.shape)
+        # print("Representation dimension: ", representations.shape)
+
+        # Similarity between the real and augmented samples
         similarity_matrix = self.similarity_function(representations, representations)
 
         # filter out the scores from the positive samples
-        # print("sim matrix shape: ", similarity_matrix.shape)
-        # print("self.batch_size", self.batch_size)
-        l_pos = torch.diag(similarity_matrix, self.batch_size)
-        r_pos = torch.diag(similarity_matrix, -self.batch_size)
+        l_pos = torch.diag(similarity_matrix, self.batch_size) 
+        r_pos = torch.diag(similarity_matrix, -self.batch_size) # These are value-wise the same, but conceptionally differ
         
-        positives = torch.cat([l_pos, r_pos]).view(2 * self.batch_size, 1)
+        # print("The size of some stuff in loss: ")
+        # print("Similarity matrix: ", similarity_matrix.shape)
+        # print("lpos shape: ", l_pos.shape)
+        # print("rpos shape: ", r_pos.shape)
+        # print("batch size: ", self.batch_size)
+        # print("lpos: ", l_pos)
+        # print("rpos: ", r_pos)
 
-        negatives = similarity_matrix[self.mask_samples_from_same_repr].view(2 * self.batch_size, -1)
+        # These are positive samples, these should be close
+        positives = torch.cat([l_pos, r_pos]).view(2 * self.batch_size, 1)  
 
+        # These are negative samples, should be far (everything except, the main diagonal and the 2 subdiagonals)
+        negatives = similarity_matrix[self.mask_samples_from_same_repr].view(2 * self.batch_size, -1) 
+
+        # Scale them with the temperature
         logits = torch.cat((positives, negatives), dim=1)
         logits /= self.temperature
 
+        # positives are in the 0.th column --> aim is that these are 1, all other coordinates are 0
         """Criterion has an internal one-hot function. Here, make all positives as 1 while all negatives as 0. """
         labels = torch.zeros(2 * self.batch_size).to(self.device).long()
         CE = self.criterion(logits, labels)
+        loss = CE
+        
+        # Note: CE is L_{T,i}
+        # Note: A little difference, inside the -log, we add i=j too to the sum in the denominator
 
-        onehot_label = torch.cat((torch.ones(2 * self.batch_size, 1),torch.zeros(2 * self.batch_size, negatives.shape[-1])),dim=-1).to(self.device).long()
+        # This is the same as labels, just extended
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.],
+        # [1., 0., 0., 0., 0., 0., 0.]
+
+        # onehot_label = torch.cat((torch.ones(2 * self.batch_size, 1),torch.zeros(2 * self.batch_size, negatives.shape[-1])),dim=-1).to(self.device).long()
+        
         # Add poly loss
-        pt = torch.mean(onehot_label* torch.nn.functional.softmax(logits,dim=-1))
+        # pt = torch.mean(onehot_label* torch.nn.functional.softmax(logits, dim=-1))
+        
+        # Softmax along the row (for each cell) -> take the softmax that belongs to the positives -> mean()
+        # The means of the the softmax of row, but only for positives
 
-        epsilon = self.batch_size
+
+        #epsilon = self.batch_size # I think this might be wrong
         # loss = CE/ (2 * self.batch_size) + epsilon*(1-pt) # replace 1 by 1/self.batch_size
-        loss = CE / (2 * self.batch_size) + epsilon * (1/self.batch_size - pt)
+        # loss = CE / (2 * self.batch_size) + epsilon * (1/self.batch_size - pt)
         # loss = CE / (2 * self.batch_size)
 
         return loss

@@ -8,6 +8,7 @@ from sklearn.metrics import roc_auc_score, classification_report, confusion_matr
     average_precision_score, accuracy_score, precision_score,f1_score,recall_score
 from sklearn.neighbors import KNeighborsClassifier
 from model import * 
+import numpy as np
 
 def one_hot_encoding(X):
     X = [int(x) for x in X]
@@ -15,8 +16,27 @@ def one_hot_encoding(X):
     b = np.eye(n_values)[X]
     return b
 
+def mixup_data(data, aug1, data_f, aug1_f, alpha = 1.0):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+
+    # print("Incoming dimensions: ", data.shape, aug1.shape, data_f.shape, aug1_f.shape)
+    batch_size = data.size()[0]
+    index = torch.randperm(batch_size)
+
+    mixed_data = lam * data + (1 - lam) * data[index, :]
+    mixed_aug1 = lam * aug1 + (1 - lam) * aug1[index, :]
+    mixed_data_f = lam * data_f + (1 - lam) * data_f[index, :]
+    mixed_aug1_f = lam * aug1_f + (1 - lam) * aug1_f[index, :]
+    # print("Outgoing dimensions: ", mixed_data.shape, mixed_aug1.shape, mixed_data_f.shape, mixed_aug1_f.shape)
+
+    return mixed_data, mixed_aug1, mixed_data_f, mixed_aug1_f
+
 def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl, valid_dl, test_dl, device,
-            logger, config, experiment_log_dir, training_mode):
+            logger, config, experiment_log_dir, training_mode, use_mixup):
     # Start training
     logger.debug("Training started ....")
 
@@ -31,7 +51,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             step += 1
             # Train and validate
             """Train. In fine-tuning, this part is also trained???"""
-            train_loss = model_pretrain(model, model_optimizer, criterion, train_dl, config, device, training_mode)
+            train_loss = model_pretrain(model, model_optimizer, criterion, train_dl, config, device, training_mode, use_mixup)
             logger.debug(f'\nPre-training Epoch : {epoch} \nTrain Loss : {train_loss:.4f}')
 
         os.makedirs(os.path.join(experiment_log_dir, "saved_models"), exist_ok=True)
@@ -84,7 +104,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             # than previous highest F1 then save the weights, otherwise revert back to previous 
 
             """Use KNN as another classifier; it's an alternation of the MLP classifier in function model_test. 
-            Experiments show KNN and MLP may work differently in different settings, so here we provide both. """
+            Experiments show KNN and MLP may work differently in different settings, so here we provide both."""
             # train classifier: KNN
             neigh = KNeighborsClassifier(n_neighbors=5)
             neigh.fit(emb_finetune, label_finetune)
@@ -120,7 +140,7 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
 
     logger.debug("\n################## Training is Done! #########################")
 
-def model_pretrain(model, model_optimizer, criterion, train_loader, config, device, training_mode):
+def model_pretrain(model, model_optimizer, criterion, train_loader, config, device, training_mode, use_mixup):
     total_loss = []
     model.train()
     global loss, loss_t, loss_f, l_TF, loss_c, data_test, data_f_test
@@ -128,33 +148,44 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
     # optimizer
     model_optimizer.zero_grad()
 
+    # TODO We want to use proper mixup here
+    # No need to mixup the labels too, we dont use them here
     for batch_idx, (data, labels, aug1, data_f, aug1_f) in enumerate(train_loader):
-        data, labels = data.float().to(device), labels.long().to(device) # data: [128, 1, 178], labels: [128]
+
+        # The mixup happens here
+        if use_mixup == True:
+            alpha = float(config.alpha)
+            data, aug1, data_f, aug1_f = mixup_data(data, aug1, data_f, aug1_f, alpha = alpha)
+
+        data = data.float().to(device) #, labels.long().to(device) # data: [128, 1, 178], labels: [128]
         aug1 = aug1.float().to(device)  # aug1 = aug2 : [128, 1, 178]
         data_f, aug1_f = data_f.float().to(device), aug1_f.float().to(device)  # aug1 = aug2 : [128, 1, 178]
 
         """Produce embeddings"""
         # print("Data shape:", data.shape)
         # print("data_f", data_f.shape)
-        #asdf
+
         h_t, z_t, h_f, z_f = model(data, data_f)
         h_t_aug, z_t_aug, h_f_aug, z_f_aug = model(aug1, aug1_f)
 
         """Compute Pre-train loss"""
         """NTXentLoss: normalized temperature-scaled cross entropy loss. From SimCLR"""
-        nt_xent_criterion = NTXentLoss_poly(device, config.batch_size, config.Context_Cont.temperature,
+        nt_xent_criterion = NTXentLoss_poly(device, config.target_batch_size, config.Context_Cont.temperature,
                                        config.Context_Cont.use_cosine_similarity) # device, 128, 0.2, True
 
+        # print("Here is a problem with the dimensions: ")
+        # print(h_t.shape, h_t_aug.shape)
+        
         loss_t = nt_xent_criterion(h_t, h_t_aug)
         loss_f = nt_xent_criterion(h_f, h_f_aug)
         l_TF = nt_xent_criterion(z_t, z_f) # this is the initial version of TF loss
 
+        # This is the pair loss
         l_1, l_2, l_3 = nt_xent_criterion(z_t, z_f_aug), nt_xent_criterion(z_t_aug, z_f), nt_xent_criterion(z_t_aug, z_f_aug)
         loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3)
 
         lam = 0.2
-        loss = lam*(loss_t + loss_f) + l_TF # (1 - lam)*loss_c  
-
+        loss = lam*(loss_t + loss_f) + (1 - lam)*loss_c # l_TF 
 
         total_loss.append(loss.item())
         loss.backward()
@@ -246,13 +277,15 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
                                             config.Context_Cont.use_cosine_similarity)
         #print("ht shape", h_t.shape)
         #print("ht_aug shape", h_t_aug.shape)
+
         loss_t = nt_xent_criterion(h_t, h_t_aug)
         loss_f = nt_xent_criterion(h_f, h_f_aug)
-        l_TF = nt_xent_criterion(z_t, z_f)
 
-        l_1, l_2, l_3 = nt_xent_criterion(z_t, z_f_aug), nt_xent_criterion(z_t_aug, z_f), \
-                        nt_xent_criterion(z_t_aug, z_f_aug)
-        loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3) #
+        # l_TF = nt_xent_criterion(z_t, z_f)
+
+        # l_1, l_2, l_3 = nt_xent_criterion(z_t, z_f_aug), nt_xent_criterion(z_t_aug, z_f), \
+        #                nt_xent_criterion(z_t_aug, z_f_aug)
+        # loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3) #
 
 
         """Add supervised classifier: 1) it's unique to finetuning. 2) this classifier will also be used in test."""
@@ -261,12 +294,14 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
         # sdcsdc
         predictions = classifier(fea_concat)
         fea_concat_flat = fea_concat.reshape(fea_concat.shape[0], -1)
+        
         #print("Fea_concat_flat.shape", fea_concat_flat.shape)
         #print("Labels: ", labels)
+
         loss_p = criterion(predictions, labels)
 
         lam = 0.1
-        loss = loss_p  + lam*(loss_t + loss_f) #+ l_TF # I don't think this is right
+        loss = loss_p  + lam*(loss_t + loss_f) # + l_TF # I don't think this is right
 
         acc_bs = labels.eq(predictions.detach().argmax(dim=1)).float().mean()
 
