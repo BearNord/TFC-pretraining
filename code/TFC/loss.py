@@ -143,7 +143,7 @@ class NTXentLoss_poly(torch.nn.Module):
         """Criterion has an internal one-hot function. Here, make all positives as 1 while all negatives as 0. """
         labels = torch.zeros(2 * self.batch_size).to(self.device).long()
         CE = self.criterion(logits, labels)
-        loss = CE
+        loss = CE / (2*self.batch_size)
         
         # Note: CE is L_{T,i}
         # Note: A little difference, inside the -log, we add i=j too to the sum in the denominator
