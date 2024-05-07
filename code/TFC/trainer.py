@@ -180,12 +180,12 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
         loss_f = nt_xent_criterion(h_f, h_f_aug)
         l_TF = nt_xent_criterion(z_t, z_f) # this is the initial version of TF loss
 
+        # This is the pair loss
         l_1, l_2, l_3 = nt_xent_criterion(z_t, z_f_aug), nt_xent_criterion(z_t_aug, z_f), nt_xent_criterion(z_t_aug, z_f_aug)
         loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3)
 
         lam = 0.2
-        loss = lam*(loss_t + loss_f) + l_TF # (1 - lam)*loss_c  
-
+        loss = lam*(loss_t + loss_f) + (1 - lam)*loss_c # l_TF 
 
         total_loss.append(loss.item())
         loss.backward()
@@ -277,13 +277,15 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
                                             config.Context_Cont.use_cosine_similarity)
         #print("ht shape", h_t.shape)
         #print("ht_aug shape", h_t_aug.shape)
+
         loss_t = nt_xent_criterion(h_t, h_t_aug)
         loss_f = nt_xent_criterion(h_f, h_f_aug)
-        l_TF = nt_xent_criterion(z_t, z_f)
 
-        l_1, l_2, l_3 = nt_xent_criterion(z_t, z_f_aug), nt_xent_criterion(z_t_aug, z_f), \
-                        nt_xent_criterion(z_t_aug, z_f_aug)
-        loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3) #
+        # l_TF = nt_xent_criterion(z_t, z_f)
+
+        # l_1, l_2, l_3 = nt_xent_criterion(z_t, z_f_aug), nt_xent_criterion(z_t_aug, z_f), \
+        #                nt_xent_criterion(z_t_aug, z_f_aug)
+        # loss_c = (1 + l_TF - l_1) + (1 + l_TF - l_2) + (1 + l_TF - l_3) #
 
 
         """Add supervised classifier: 1) it's unique to finetuning. 2) this classifier will also be used in test."""
@@ -292,12 +294,14 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
         # sdcsdc
         predictions = classifier(fea_concat)
         fea_concat_flat = fea_concat.reshape(fea_concat.shape[0], -1)
+        
         #print("Fea_concat_flat.shape", fea_concat_flat.shape)
         #print("Labels: ", labels)
+
         loss_p = criterion(predictions, labels)
 
         lam = 0.1
-        loss = loss_p  + lam*(loss_t + loss_f) #+ l_TF # I don't think this is right
+        loss = loss_p  + lam*(loss_t + loss_f) # + l_TF # I don't think this is right
 
         acc_bs = labels.eq(predictions.detach().argmax(dim=1)).float().mean()
 

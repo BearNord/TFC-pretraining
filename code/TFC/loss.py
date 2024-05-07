@@ -143,6 +143,8 @@ class NTXentLoss_poly(torch.nn.Module):
         """Criterion has an internal one-hot function. Here, make all positives as 1 while all negatives as 0. """
         labels = torch.zeros(2 * self.batch_size).to(self.device).long()
         CE = self.criterion(logits, labels)
+        loss = CE
+        
         # Note: CE is L_{T,i}
         # Note: A little difference, inside the -log, we add i=j too to the sum in the denominator
 
@@ -156,17 +158,18 @@ class NTXentLoss_poly(torch.nn.Module):
         # [1., 0., 0., 0., 0., 0., 0.],
         # [1., 0., 0., 0., 0., 0., 0.]
 
-        onehot_label = torch.cat((torch.ones(2 * self.batch_size, 1),torch.zeros(2 * self.batch_size, negatives.shape[-1])),dim=-1).to(self.device).long()
+        # onehot_label = torch.cat((torch.ones(2 * self.batch_size, 1),torch.zeros(2 * self.batch_size, negatives.shape[-1])),dim=-1).to(self.device).long()
         
         # Add poly loss
-        pt = torch.mean(onehot_label* torch.nn.functional.softmax(logits, dim=-1))
+        # pt = torch.mean(onehot_label* torch.nn.functional.softmax(logits, dim=-1))
+        
         # Softmax along the row (for each cell) -> take the softmax that belongs to the positives -> mean()
         # The means of the the softmax of row, but only for positives
 
 
-        epsilon = self.batch_size # I think this might be wrong
+        #epsilon = self.batch_size # I think this might be wrong
         # loss = CE/ (2 * self.batch_size) + epsilon*(1-pt) # replace 1 by 1/self.batch_size
-        loss = CE / (2 * self.batch_size) + epsilon * (1/self.batch_size - pt)
+        # loss = CE / (2 * self.batch_size) + epsilon * (1/self.batch_size - pt)
         # loss = CE / (2 * self.batch_size)
 
         return loss
