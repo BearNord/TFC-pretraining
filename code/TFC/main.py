@@ -72,7 +72,7 @@ training_mode = args.training_mode
 run_description = args.run_description # + '_mixup_' + str(args.use_mixup)
 logs_save_dir = args.logs_save_dir
 os.makedirs(logs_save_dir, exist_ok=True)
-exec(f'from config_files.{pretrain_dataset[0]}_Configs import Config as Configs') #TODO change this, so it depends only on the fine_tune dataset
+exec(f'from config_files.SleepEEG_Configs import Config as Configs') #TODO change this, so it depends only on the fine_tune dataset
 configs = Configs()
 
 # # ##### fix random seeds for reproducibility ########
