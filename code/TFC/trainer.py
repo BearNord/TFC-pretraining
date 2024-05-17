@@ -7,6 +7,7 @@ from loss import *
 from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix, \
     average_precision_score, accuracy_score, precision_score,f1_score,recall_score
 from sklearn.neighbors import KNeighborsClassifier
+from torch.utils.data import RandomSampler
 from model import * 
 import numpy as np
 
@@ -261,10 +262,10 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
             print(f"Reserved: {r // 1024**2} MB")
             print(f"allocated: {a // 1024**2} MB")
             print(f"Free: {f // 1024**2} MB")
-        # print("Memory usage of X_train in MB: ", data.element_size() * data.nelement()//1024**2 )
-        # print("Memory usage of y_train in MB: ", data_f.element_size() * data_f.nelement()//1024**2 )
-        # print("Memory usage of X_train in MB: ", aug1.element_size() * aug1.nelement()//1024**2 )
-        # print("Memory usage of y_train in MB: ", aug1_f.element_size() * aug1_f.nelement()//1024**2 )
+            # print("Memory usage of X_train in MB: ", data.element_size() * data.nelement()//1024**2 )
+            # print("Memory usage of y_train in MB: ", data_f.element_size() * data_f.nelement()//1024**2 )
+            # print("Memory usage of X_train in MB: ", aug1.element_size() * aug1.nelement()//1024**2 )
+            # print("Memory usage of y_train in MB: ", aug1_f.element_size() * aug1_f.nelement()//1024**2 )
  
         """if random initialization:"""
         model_optimizer.zero_grad()  # The gradients are zero, but the parameters are still randomly initialized.

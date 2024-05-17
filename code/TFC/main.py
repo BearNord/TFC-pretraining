@@ -42,6 +42,12 @@ parser.add_argument('--home_path', default=home_dir, type=str,
 parser.add_argument('--use_mixup', default="False", type=str,
                     help='The use of mixup strategy during pre-train if there are two or more pre-train dataset')
 
+parser.add_argument('--add_target_to_pretrain', default = False, type=str, 
+                    help = "Whether to add the target dataset to the pre_train dataset(s)." )
+
+parser.add_argument('--fix_n_epoch_or_n_sample', default = "epoch", type = str,
+                    help = 'Whether to have a fix epoch number to iterate through the dataset epoch times, or to fix number of sample seen. Choice: {epoch, n_sample}')
+
 parser.add_argument('--tags', default="", type=str,
                     help='Tags for wandb.')
 
@@ -58,8 +64,6 @@ if with_gpu:
 else:
     device = torch.device("cpu")
 # device = torch.device("cpu")
-
-
 
 print('We are using %s now.' %device)
 
@@ -108,6 +112,8 @@ sourcedata_path = [f"../../datasets/{pre}" for pre in pretrain_dataset]
 targetdata_path = f"../../datasets/{targetdata}"
 subset = False  # if subset= true, use a subset for debugging.
 mixup = False if args.use_mixup == "False" else True
+add_target = False  if args.add_target_to_pretrain == "False" else True
+epoch_v_iter = args.fix_n_epoch_or_n_sample
 print("Are we using mixup? ", mixup)
 tags = args.tags.split(',') if args.tags != "" else []
 pre_train_seed = args.pre_train_seed
@@ -133,7 +139,7 @@ wandb.log({"experiment_dir" : experiment_log_dir,
             "subset" : subset,
             "seed": SEED})
 
-train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, use_mixup = mixup)
+train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, add_target = add_target, epoch_v_iter = epoch_v_iter)
 logger.debug("Data loaded ...")
 
 # Load Model

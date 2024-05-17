@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data import Dataset
 import os
 import numpy as np
@@ -127,7 +127,8 @@ class Load_Dataset(Dataset):
         return self.len
 
 
-def data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset=True, use_mixup=False):
+def data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset=True, add_target = False, epoch_v_iter = "epoch"):
+
     # Loading in the torch arrays
     print(f"The order of the datsets: {sourcedata_path}")
     train_datasets = [] # If there are multiple datasets for pre.training load in all
@@ -137,23 +138,6 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
 
     finetune_dataset = torch.load(os.path.join(targetdata_path, "train.pt"))  # train.pt
     test_dataset = torch.load(os.path.join(targetdata_path, "test.pt"))  # test.pt
-
-     # If there are multiple datasets use mixup method
-    # if (len(train_datasets) != 1) & use_mixup:
-    #     print("use_mixup", use_mixup)
-    #     new_dataset = {"samples" : [], "labels": []}
-    #     for (dataset_1, dataset_2) in it.combinations(train_datasets,2):
-    #         mixed_up_set = mixup_datasets(dataset_1, dataset_2, configs)
-    #         new_dataset["samples"].append(mixed_up_set["samples"])
-    #         new_dataset["labels"].append(mixed_up_set["labels"])
-    #         # print("type and dim of samples and labels: ")
-    #         # print("samples: ", type(new_dataset["samples"], new_dataset["samples"].shape))
-    #         # print("samples: ", type(new_dataset["labels"], new_dataset["labels"].shape))
-
-    #     new_dataset["samples"] = torch.cat(new_dataset["samples"],0)
-    #     new_dataset["labels"] = torch.cat(new_dataset["labels"],0)
-    #     # print("new_dataset[samples].shape: ", new_dataset["samples"].shape)
-    #     # print("new_dataset[labels].shape: ", new_dataset["labels"].shape)
 
     """In pre-training:
     train_dataset: [371055, 1, 178] from SleepEEG.
@@ -175,40 +159,27 @@ def data_generator(sourcedata_path, targetdata_path, configs, training_mode, sub
     test_dataset = Load_Dataset(test_dataset, configs, training_mode,
                                 target_dataset_size=configs.target_batch_size, subset=False)
 
-    # If we we are using mixup then merge the mixed up dataset with the new
-    # if (len(train_datasets) != 0) & use_mixup:
-    #     mixed_dataset = Load_Dataset(new_dataset, configs, training_mode,
-    #                                 target_dataset_size = configs.target_batch_size, subset=subset)
-    #     print("I have created and merged mixed up samples with the train dataset")
-    #     train_dataset = torch.utils.data.ConcatDataset([train_dataset, mixed_dataset])
+    # Add the target training dataset to the pre-train [include the aricle.]
+    if add_target:
+        print("Target train dataset added to pre_train dataset")
+        train_dataset = torch.utils.data.ConcatDataset([train_dataset, finetune_dataset])
 
-    # If there are more than one pre_train dataset merge them together
-    # skip_additional_datasets = False
-    # if not skip_additional_datasets:
-    #     print("I am not skipping additional datasets")
-    #     for train_data in train_datasets:
-    #         # # sub_dataset_size = configs.target_batch_size #//10 * 1
-    #         # print(f"configs.target_batch_size: {configs.target_batch_size}")
-    #         # print(f"sub_dataset_size: {sub_dataset_size}")
-    #         tmp_dataset = Load_Dataset(train_data, configs, training_mode,
-    #                                 target_dataset_size=configs.target_batch_size, subset=subset)
-
-    #         train_dataset = torch.utils.data.ConcatDataset([train_dataset, tmp_dataset])
-
-    # TODO return a list of dataloaders for train_loader 
-    # Creating loaders
-    # train_loader = []
-    # for train_dataset in train_datasets:
-    #     curr_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=configs.batch_size,
-    #                                                 shuffle=True, drop_last=configs.drop_last,
-    #                                                 num_workers=0)
-    #     train_loader.append(curr_loader)
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=configs.target_batch_size,
-                                               shuffle=True, drop_last=configs.drop_last,
+    # Create the dataloaders
+    if epoch_v_iter == "n_sample":
+        print(f" Num iter is fixed to: {configs.num_iter}")
+        sampler = RandomSampler(train_dataset, replacement=True, num_samples = configs.num_iter // configs.pre_train_num_epoch)
+        train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=configs.target_batch_size,
+                                               shuffle=False, drop_last=configs.drop_last, sampler = sampler,
                                                num_workers=0)
+    else:
+        train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=configs.target_batch_size,
+                                                shuffle=True, drop_last=configs.drop_last,
+                                                num_workers=0)
+        
     finetune_loader = torch.utils.data.DataLoader(dataset=finetune_dataset, batch_size=configs.target_batch_size,
                                                shuffle=True, drop_last=configs.drop_last,
                                                num_workers=0)
+    
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=configs.target_batch_size,
                                               shuffle=True, drop_last=True,
                                               num_workers=0)
