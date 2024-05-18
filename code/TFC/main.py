@@ -137,6 +137,8 @@ wandb.log({"experiment_dir" : experiment_log_dir,
             "mixup" : mixup,
             "alpha" : configs.alpha,
             "subset" : subset,
+            "epoch_v_iter" : epoch_v_iter,
+            "add_target" : add_target,
             "seed": SEED})
 
 train_dl, valid_dl, test_dl = data_generator(sourcedata_path, targetdata_path, configs, training_mode, subset = subset, add_target = add_target, epoch_v_iter = epoch_v_iter)
