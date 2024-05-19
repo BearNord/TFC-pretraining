@@ -168,7 +168,7 @@ if verbose == True:
 if training_mode == "fine_tune_test":
     # load saved model of this experiment
     load_from = os.path.join(os.path.join(logs_save_dir, experiment_description, run_description,
-    f"pre_train_seed_{pre_train_seed}_2layertransformer", "saved_models")) #SEED
+    f"pre_train", f"_seed_{SEED}", "saved_models")) #SEED
 
     wandb.log({"pre_trained_model_dir" : load_from})
 
