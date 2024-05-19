@@ -22,7 +22,7 @@ class Config(object):
         # training configs
         self.fine_tune_num_epoch = 100 # 100 #100 #40
         self.pre_train_num_epoch = 100 #100 # 100 #40
-        self.num_iter = 100000 # 100k 
+        self.num_iter = 1000000 # 100k s
 
         # optimizer parameters
         self.optimizer = 'adam'

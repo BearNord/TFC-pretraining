@@ -69,7 +69,6 @@ print('We are using %s now.' %device)
 
 pretrain_dataset = args.pretrain_dataset
 targetdata = args.target_dataset
-experiment_description = str(pretrain_dataset) + '_2_' + str(targetdata) + '_conv'
 
 method = 'TF-C'
 training_mode = args.training_mode
@@ -79,6 +78,16 @@ os.makedirs(logs_save_dir, exist_ok=True)
 exec(f'from config_files.SleepEEG_Configs import Config as Configs') #TODO change this, so it depends only on the fine_tune dataset
 configs = Configs()
 
+subset = False  # if subset= true, use a subset for debugging.
+mixup = False if args.use_mixup == "False" else True
+add_target = False  if args.add_target_to_pretrain == "False" else True
+epoch_v_iter = args.fix_n_epoch_or_n_sample
+print("Are we using mixup? ", mixup)
+tags = args.tags.split(',') if args.tags != "" else []
+pre_train_seed = args.pre_train_seed
+
+experiment_description = str(pretrain_dataset) + '_2_' + str(targetdata) + '_conv_mixup_' + str(mixup) + "_add_target_" + str(add_target) + '_' + str(epoch_v_iter) + '_pre_train_seed_' + str(pre_train_seed) + "_fine_tune_seed_" + str(args.seed)
+
 # # ##### fix random seeds for reproducibility ########
 SEED = args.seed
 torch.manual_seed(SEED)
@@ -87,14 +96,13 @@ torch.backends.cudnn.benchmark = False
 np.random.seed(SEED)
 #####################################################
 
-experiment_log_dir = os.path.join(logs_save_dir, experiment_description, run_description, training_mode + f"_seed_{SEED}_2layertransformer")
+experiment_log_dir = os.path.join(logs_save_dir, experiment_description, run_description, training_mode, f"_seed_{SEED}")
 # 'experiments_logs/Exp1/run1/train_linear_seed_0'
 os.makedirs(experiment_log_dir, exist_ok=True)
 
 # loop through domains
 counter = 0
 src_counter = 0
-
 
 # Logging
 log_file_name = os.path.join(experiment_log_dir, f"logs_{datetime.now().strftime('%d_%m_%Y_%H_%M_%S')}.log")
@@ -110,13 +118,7 @@ logger.debug("=" * 45)
 # Load datasets
 sourcedata_path = [f"../../datasets/{pre}" for pre in pretrain_dataset]
 targetdata_path = f"../../datasets/{targetdata}"
-subset = False  # if subset= true, use a subset for debugging.
-mixup = False if args.use_mixup == "False" else True
-add_target = False  if args.add_target_to_pretrain == "False" else True
-epoch_v_iter = args.fix_n_epoch_or_n_sample
-print("Are we using mixup? ", mixup)
-tags = args.tags.split(',') if args.tags != "" else []
-pre_train_seed = args.pre_train_seed
+
 
 wandb.init(
     # set the wandb project where this run will be logged

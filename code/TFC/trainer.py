@@ -192,7 +192,7 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
         loss.backward()
         model_optimizer.step()
     
-    print('Pretraining: overall loss:{}, l_t: {}, l_f:{}, l_c:{}'.format(loss, loss_t, loss_f, l_TF))
+    print('Pretraining: overall loss:{}, l_t: {}, l_f:{}, l_TF{}, l_c:{}'.format(loss, loss_t, loss_f,l_TF, loss_c))
 
     ave_loss = torch.tensor(total_loss).mean()
 
@@ -200,7 +200,10 @@ def model_pretrain(model, model_optimizer, criterion, train_loader, config, devi
                    "pre_train/loss_f" : loss_f,
                    "pre_train/l_TF" : l_TF,
                    "pre_train/loss_c" : loss_c, 
-                   "pre_train/loss" : ave_loss
+                   "pre_train/loss" : ave_loss,
+                   "pre_train/l1" : l_1,
+                   "pre_train/l2" : l_2,
+                   "pre_train/l3" : l_3,
                    }, 
                    step = step
                   ) # Is this okay here? 
